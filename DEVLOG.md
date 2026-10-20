@@ -46,3 +46,41 @@ every constraint with raw SQL.
 - varchar(255) may be too short for URLs (Thursday).
 - Give the unique constraint a readable name (Thursday).
 - App should use a non-superuser database user on the server.
+## Day 3: Oct 21 — Target REST API
+
+**Goal:** [your 2–3 sentences from Step 1]
+
+**Did:** Built TargetController with POST /targets, GET /targets, GET /targets/{id},
+DELETE /targets/{id}, and POST /targets/{id}/pause and /resume. Tested every endpoint
+with curl.
+
+**Decisions:**
+- The API accepts a CreateTargetRequest DTO, not the entity, so clients can't set
+  id or active.
+- Pause/resume are action endpoints (POST /{id}/pause). Alternative: PATCH /{id}
+  with {"active": false}.
+- No service layer yet: the controller calls the repository directly. A service
+  comes Friday, when there's real logic.
+- Returning the entity as the response for now; a response DTO may come later.
+
+**Broke (on purpose):**
+| Test          | Got | Should be  |
+|---------------|-----|------------|
+| Duplicate URL | 500 | 409        |
+| Missing url   | 400 | 400, but message is vague |
+| GET /999      | 500 | 404 (pause/resume too) |
+| DELETE /999   | 204 | 204 or 404, to decide |
+| GET /abc      | 400 | 400        |
+| PUT /targets  | 405 | 405, with Allow header |
+
+**Learned:**
+- Spring maps some exceptions to 4xx itself; anything it doesn't recognize becomes 500.
+- deleteById silently ignores missing IDs (Spring Data 3+).
+- DELETE is idempotent: repeating it leaves the same state.
+- Spring Boot hides exception details in error responses by default, to avoid leaking internals.
+- Kotlin non-null types reject missing JSON fields for free.
+
+**Notes for Thursday:**
+- 409 for duplicate URL, 404 for missing IDs, decide on DELETE /999.
+- Clear error messages without leaking internals.
+- Leftovers from Day 2: varchar(255) for URLs, readable name for the unique constraint.
