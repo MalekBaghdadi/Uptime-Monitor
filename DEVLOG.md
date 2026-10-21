@@ -84,3 +84,66 @@ with curl.
 - 409 for duplicate URL, 404 for missing IDs, decide on DELETE /999.
 - Clear error messages without leaking internals.
 - Leftovers from Day 2: varchar(255) for URLs, readable name for the unique constraint.
+cat >> DEVLOG.md << 'EOF'
+
+## Day 4: Oct 21 — Validation and error responses
+
+**Goal:** Make the API reject bad input with clear 4xx responses instead of 500s,
+so a client always knows what it did wrong, without the server leaking internals.
+
+**Did:** Added Bean Validation to CreateTargetRequest (name, url, interval rules).
+Added GlobalExceptionHandler extending ResponseEntityExceptionHandler, so every error
+uses RFC 9457 Problem Details. Added NotFoundException (404) and ConflictException (409).
+Widened url to varchar(2048), name to varchar(100), renamed the unique constraint
+to uk_targets_url.
+
+**Scorecard:**
+| Test                    | Day 3       | Day 4                          |
+|-------------------------|-------------|--------------------------------|
+| Duplicate URL           | 500         | 409                            |
+| Missing url             | 400, vague  | 400 with field errors          |
+| GET/pause/resume /999   | 500         | 404                            |
+| DELETE /999             | 204         | 404                            |
+| GET /abc                | 400         | 400, Problem Details format    |
+| PUT /targets            | 405         | 405, Problem Details + Allow    |
+| ftp:// URL, blank name  | accepted    | 400 with field errors          |
+| URL of 300 chars        | too long    | 201 (limit now 2048)           |
+
+**Decisions:**
+- DELETE on a missing ID returns 404, consistent with GET/pause/resume.
+  Still idempotent: idempotency is about server state, not identical responses.
+- Duplicates checked twice: existsByUrl for a clear message, plus the DB unique
+  constraint as a safety net against race conditions (two requests at once).
+- Validation errors are 400 (Spring's default). Alternative: 422 for invalid values.
+- Interval limited to 30-3600 seconds.
+- URL check is shape only (http/https), not reachability.
+- Keep @field: on annotations even though the compiler flag makes it optional.
+- One generic NotFoundException in common/, reusable for CheckResult.
+
+**Broke:**
+- Missing url gave a vague 400: Kotlin's non-null String made Jackson fail before
+  validation ran. Fixed by defaulting name and url to "", so @NotBlank catches them.
+- Build failed with "Unresolved reference" x4 and "Expecting a top level declaration":
+  an extra } closed the class early. The odd-one-out error was the real clue.
+- Safety net test: disabled existsByUrl, duplicate reached Postgres, handler
+  returned a generic 409 and logged the constraint details server-side.
+
+**Learned:**
+- Request layers: Jackson -> validation -> controller -> repository -> DB.
+- ResponseEntityExceptionHandler converts all Spring MVC errors to Problem Details.
+- Tomcat sends Connection: close after a 400 (it can't trust the rest of the stream).
+- ddl-auto=update never changes or renames existing columns; schema changes
+  needed manual ALTER TABLE. Migration tools (Flyway) exist for this.
+- -Xannotation-default-target=param-property and -Xjsr305=strict in build.gradle.kts.
+- Validation and DB limits must agree, or the DB throws after validation passes.
+
+**Known limitations:**
+- https://github.com and https://github.com/ count as different URLs
+  (URL normalization: maybe in the buffer week).
+- Explicit "url": null gives a generic "Failed to read request".
+
+**Notes for Friday:**
+- CheckResult entity; deleting a target must cascade to its results.
+- Service layer arrives with the check logic.
+- Target 12 points at a page that doesn't exist: useful as a broken target.
+EOF
