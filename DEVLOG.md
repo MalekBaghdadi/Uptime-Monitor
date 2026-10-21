@@ -307,3 +307,61 @@ REQUEST_TIMEOUT, SSL, HTTP_STATUS, INVALID_URL, OTHER. Added test targets 18–2
 
 **Next:** Wed Oct 28: latest status endpoint, and honor intervalSeconds.
 EOF
+
+cat >> DEVLOG.md << 'EOF'
+
+## Day 8: Oct 22 — Latest status endpoint and per-target intervals
+
+**Goal:** One request should show the current state of every target, and each target
+should be checked on its own interval instead of all of them every minute. Both need
+the same answer: "what was each target's last check?"
+
+**Did:** Added GET /targets/status, which returns every target with its latest result
+and one clear status: UP, DOWN, PAUSED or PENDING. The scheduler now wakes every 10 s
+and checks only the targets that are due, honoring intervalSeconds.
+
+**Decisions:**
+- One query for "latest result per target" (Postgres DISTINCT ON), shared by the
+  status endpoint and the scheduler.
+- Native SQL, so the code is tied to Postgres. Accepted: it's the only database I use.
+- PAUSED wins over the last result (an old "UP" would mislead).
+  PENDING = active but never checked.
+- The status page shows errorType, not the full error message.
+- 10 s wake-up = the precision of intervals. Wake-ups with nothing due don't log.
+
+**Found:**
+- N+1 problem: the first version ran 1 query for targets + 1 per target
+  (10 queries for 9 targets). The DISTINCT ON version runs 2, whatever the count.
+- The scheduler's queries got mixed into my count. Told them apart by the
+  "where active=true" filter.
+
+**Tests:**
+| Test                                  | Result                              |
+|---------------------------------------|-------------------------------------|
+| Status endpoint, 9 targets            | 10 queries → 2                      |
+| All four states                       | UP 6, 11 · DOWN 12, 14 · PAUSED 18–22 · PENDING 23 (new) |
+| GitHub, 120 s                         | gap 2:00.9                          |
+| Example, 60 s                         | gaps 1:00.3 – 1:01.6                |
+| Example NET, 30 s (changed in SQL live)| gaps 30.1 – 31.1 s, no restart      |
+
+**Learned:**
+- How to spot N+1 in the Hibernate log, and fix it with one query.
+- DISTINCT ON keeps the first row per group; ORDER BY decides which row is first.
+- Derived queries: findFirstByTargetIdOrderByCheckedAtDesc writes its own SQL.
+- Window functions: LAG(...) OVER (PARTITION BY ... ORDER BY ...) to measure gaps
+  between rows.
+- Kotlin: when, smart casts, associate / associateBy.
+- Reading target.id on a lazy relation doesn't load the target.
+- Gaps land at 30.x s, not 30–40 s: wake-ups line up with the previous check.
+  A 45 s interval would give ~50 s gaps.
+
+**Known limitations:**
+- Wake-ups with nothing due still run 2 queries: ~12 wasted queries a minute.
+- DISTINCT ON reads the whole check_results table, which grows ~8,000 rows a day
+  at current settings. Week 6: index on (target_id, checked_at).
+- Checks are still sequential.
+- No endpoint to change a target's interval (did it in SQL today).
+- Connect timeout (target 19) still unexplained.
+
+**Next:** Thu Oct 29: uptime % over the last 24 hours, as a SQL aggregation.
+EOF
