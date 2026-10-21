@@ -201,3 +201,53 @@ and a CheckResultResponse DTO.
 **Next:** Week 1 checkpoint recording, then Monday: @Scheduled checks every 60 s,
 remove TempCheckController.
 EOF
+
+
+cat >> DEVLOG.md << 'EOF'
+
+## Day 6: Oct 22 (plan: Mon Oct 26) — Scheduled checks
+
+**Goal:** Today the app starts checking targets by itself. A scheduled job runs every 60 seconds,
+checks every active target, and saves a result for each, so I no longer need to call an endpoint.
+Paused targets are skipped, and the temporary check endpoint is removed.
+
+**Did:** Turned on scheduling, added CheckScheduler and findByActiveTrue(), removed
+TempCheckController. Added a User-Agent header to every check.
+
+**Decisions:**
+- fixedDelay (60 s after the last run finishes), not fixedRate, so runs never overlap.
+- Every active target is checked each minute; intervalSeconds is ignored for now.
+  Honoring it needs "when was this target last checked?", which comes Wed Oct 28.
+- try/catch around each target, not the whole loop: one crash can't skip the others.
+- One summary log line per run: count, time, up / down / crashed.
+
+**Broke:**
+- Wikipedia came back 403. Java's default User-Agent (Java-http-client/21) is blocked.
+  curl proved it: our User-Agent got 200, Java's got 403. Fixed by sending
+  "UptimeMonitor/0.1 (+repo link)".
+
+**Tests:**
+| Test                          | Result                                  |
+|-------------------------------|-----------------------------------------|
+| Normal run (4–5 targets)      | under 1 s                               |
+| Paused target 12              | no new rows while paused                |
+| Slow site (httpbin delay 8 s) | run went from 676 ms to 10,293 ms       |
+| Wikipedia                     | 403 → 200 after the User-Agent fix      |
+
+**Learned:**
+- @Scheduled does nothing without @EnableScheduling.
+- Spring's scheduler has one thread (scheduling-1), so checks run one after another.
+- findByActiveTrue() becomes WHERE active = true (visible in the Hibernate log).
+- fixedRate vs fixedDelay vs cron.
+- A site can be up for a browser and "down" for a bot, based only on the User-Agent.
+- Postgres shows timestamps in UTC (22:12 = 01:12 Beirut).
+
+**Known limitations:**
+- intervalSeconds ignored (Wed Oct 28).
+- Sequential checks: one slow site delays all the others (Week 6: parallel checks).
+- A site taking ~10 s flips between up and down because of the 10 s timeout (Tue Oct 27).
+- Week 1 checkpoint video not recorded yet.
+
+**Next:** Tue Oct 27: handle timeouts, connection refused, DNS and SSL errors properly,
+and fix "ConnectException: no details".
+EOF
