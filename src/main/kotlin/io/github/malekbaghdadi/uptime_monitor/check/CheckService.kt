@@ -26,6 +26,8 @@ class CheckService(
         val result = try {
             val request = HttpRequest.newBuilder(URI.create(target.url))
                 .timeout(Duration.ofSeconds(10))
+                // Say who we are. Some sites (e.g. Wikipedia) block Java's default User-Agent.
+                .header("User-Agent", USER_AGENT)
                 .GET()
                 .build()
 
@@ -59,4 +61,10 @@ class CheckService(
         up = false,
         error = "${e.javaClass.simpleName}: ${e.message ?: "no details"}".take(500),
     )
+
+    companion object {
+        // App name/version, plus a link where a site owner can find out who we are.
+        private const val USER_AGENT =
+            "UptimeMonitor/0.1 (+https://github.com/malekbaghdadi/uptime-monitor)"
+    }
 }
