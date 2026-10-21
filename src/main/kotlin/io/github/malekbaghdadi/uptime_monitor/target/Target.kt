@@ -6,14 +6,18 @@ import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
+import jakarta.persistence.UniqueConstraint
 
 @Entity
-@Table(name = "targets")
+@Table(
+    name = "targets",
+    uniqueConstraints = [UniqueConstraint(name = "uk_targets_url", columnNames = ["url"])],
+)
 class Target(
-    @Column(nullable = false)
+    @Column(nullable = false, length = 100)
     var name: String,
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false, length = 2048)
     var url: String,
 
     @Column(nullable = false)
