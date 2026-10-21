@@ -251,3 +251,59 @@ TempCheckController. Added a User-Agent header to every check.
 **Next:** Tue Oct 27: handle timeouts, connection refused, DNS and SSL errors properly,
 and fix "ConnectException: no details".
 EOF
+
+cat >> DEVLOG.md << 'EOF'
+
+## Day 7: Oct 22 — Failure handling
+
+**Goal:** [your 2–3 sentences]
+
+**Did:** Added an ErrorType enum and an error_type column. CheckService now walks the
+exception's cause chain and labels each failure: DNS, CONNECTION_REFUSED, CONNECT_TIMEOUT,
+REQUEST_TIMEOUT, SSL, HTTP_STATUS, INVALID_URL, OTHER. Added test targets 18–22.
+
+**Decisions:**
+- A separate error_type column, not just better messages: the type is for queries and
+  alerts, the message is for people.
+- EnumType.STRING, not the position number, so reordering the enum can't corrupt old rows.
+- Classify most specific first (a connect timeout is also a timeout; DNS failures arrive
+  wrapped in a ConnectException).
+- Save only the outer error and the root cause: the middle ones repeat, and take(500)
+  would cut the root cause, which is the useful part.
+- 4xx/5xx answers are labeled HTTP_STATUS.
+
+**Broke:**
+- DNS failure and closed port both showed "ConnectException: no details". The real
+  reason was two levels down: UnresolvedAddressException vs ClosedChannelException.
+- The expired-certificate message repeated 3 times; the expiry date was only at the end.
+- 10.255.255.1 is labeled REQUEST_TIMEOUT, not CONNECT_TIMEOUT. The gap between
+  checked_at values showed each check took 10 s, so the 5 s connect timeout didn't fire
+  (it did once). Cause unknown.
+
+**Tests:**
+| Target                     | Failure            | Label              |
+|----------------------------|--------------------|--------------------|
+| 18 nothing-here.invalid    | DNS                | DNS                |
+| 14 localhost:9999          | closed port        | CONNECTION_REFUSED |
+| 19 10.255.255.1            | no answer          | REQUEST_TIMEOUT (expected CONNECT_TIMEOUT) |
+| 20 httpbin delay/15        | slow reply         | REQUEST_TIMEOUT    |
+| 21 expired.badssl.com      | expired cert       | SSL                |
+| 22 wrong.host.badssl.com   | cert for wrong host| SSL                |
+| 12 missing page            | 404                | HTTP_STATUS        |
+
+**Learned:**
+- Exceptions wrap other exceptions (e.cause). The real reason is often at the bottom.
+- HttpConnectTimeoutException is a kind of HttpTimeoutException, and
+  UnresolvedAddressException is a kind of IllegalArgumentException, so order matters.
+- Hibernate's auto-update added the column plus a CHECK rule listing the enum values.
+  It won't update that rule if I add a value later: a reason to use Flyway.
+- Gaps between checked_at values show how long each check took.
+- Expired certificate vs hostname mismatch: two different SSL failures (Network+).
+
+**Known limitations:**
+- Connect timeout not reliable (target 19).
+- Rows from before today have no error_type.
+- The broken test targets add about 25 s to every run, since checks are sequential.
+
+**Next:** Wed Oct 28: latest status endpoint, and honor intervalSeconds.
+EOF
