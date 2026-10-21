@@ -3,6 +3,8 @@ package io.github.malekbaghdadi.uptime_monitor.check
 import io.github.malekbaghdadi.uptime_monitor.target.Target
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
+import jakarta.persistence.EnumType
+import jakarta.persistence.Enumerated
 import jakarta.persistence.FetchType
 import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
@@ -31,6 +33,12 @@ class CheckResult(
     var statusCode: Int? = null,
 
     var responseTimeMs: Long? = null,
+
+    // NULL when the check succeeded.
+    // STRING stores the name ("DNS"), not the position (0, 1, 2...).
+    @Enumerated(EnumType.STRING)
+    @Column(length = 30)
+    var errorType: ErrorType? = null,
 
     @Column(length = 500)
     var error: String? = null,
