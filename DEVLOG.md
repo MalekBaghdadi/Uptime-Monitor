@@ -147,3 +147,57 @@ to uk_targets_url.
 - Service layer arrives with the check logic.
 - Target 12 points at a page that doesn't exist: useful as a broken target.
 EOF
+
+cat >> DEVLOG.md << 'EOF'
+
+## Day 5: Oct 21 — First real check of a URL
+
+**Goal:** Make the app actually check a website: request its URL, time the answer,
+and save the result, so there's real data to build uptime numbers on.
+
+**Did:** Added the CheckResult entity (many results per target) and its repository.
+Added CheckService, the first service layer, which requests a URL with Java's
+HttpClient and saves the result. Added a temporary POST /targets/{id}/check endpoint
+and a CheckResultResponse DTO.
+
+**Decisions:**
+- Up = status 200-399, after following redirects.
+- GET request, not HEAD (some servers handle HEAD badly).
+- Timeouts: 5 s to connect, 10 s for the response.
+- Response time = until the status code arrives, not the whole page.
+- Deleting a target deletes its results in the database (ON DELETE CASCADE via
+  @OnDelete), in one statement instead of loading and deleting each row.
+- The endpoint returns a DTO, not the entity (the lazy Target doesn't convert to JSON well).
+- Manual check works on paused targets; the scheduler will skip them.
+- No index on (target_id, checked_at) yet, on purpose: Week 6's load test should find it.
+
+**Broke:**
+- First check of GitHub took 32 s. curl showed the network was slow too
+  (14 s to first byte, 21 s total). The check was also downloading the whole page.
+  Switched to stopping the clock when the status code arrives: 535 ms.
+- \d check_results said "not found": I checked before the app had finished starting.
+
+**Tests:**
+| Test                    | Result                                     |
+|-------------------------|--------------------------------------------|
+| GitHub                  | up, 200, ~0.5 s                            |
+| Page that doesn't exist | down, 404                                  |
+| Target 999              | 404 from our API                           |
+| Domain .invalid         | down, no status, ConnectException          |
+| Closed port 9999        | down, no status, ConnectException          |
+| Delete target           | its 2 results deleted too                  |
+
+**Learned:**
+- @ManyToOne + @JoinColumn creates the foreign key column (target_id).
+- JPA cascade = REMOVE loads every child row; @OnDelete lets Postgres do it in one go.
+- curl -w can split time into DNS, connect, first byte and total.
+- A response time that includes downloading the page measures the network, not the site.
+
+**Known limitations / leftovers:**
+- DNS failure and connection refused both show "ConnectException: no details";
+  the real reason is inside the exception's cause (fix on Oct 27).
+- The foreign key has a random name (fkjc1s...).
+
+**Next:** Week 1 checkpoint recording, then Monday: @Scheduled checks every 60 s,
+remove TempCheckController.
+EOF
