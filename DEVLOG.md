@@ -421,3 +421,42 @@ by Postgres in one query, and prove the numbers are right by checking the raw ro
 
 **Next:** Fri Oct 30: unit tests for the checker (success, timeout, error status), mocking the HTTP call.
 EOF
+
+cat >> DEVLOG.md << 'EOF'
+
+## Day 10 (Thu Oct 22, plan: Fri Oct 30): unit tests for the checker
+
+**Goal:** (your 2–3 sentences)
+
+**Did:** Moved HttpClient into a @Bean (HttpClientConfig) and injected it into CheckService.
+Added MockK. Wrote CheckServiceTest: 6 unit tests that fake the HTTP call and the repository,
+so they run with no network, database or Spring.
+
+**Decisions:**
+- MockK, not Mockito: made for Kotlin. Mockito's any() returns null, which breaks non-null params.
+- HttpClient injected through the constructor, so the app gets the real one and tests get a fake.
+- The repository is mocked too: save() just returns what it was given.
+- Each test is arrange / act / assert. JUnit makes a new test object per test, so fakes never leak.
+
+**Broke:**
+- Put CheckServiceTest.kt in src/main: every MockK/JUnit import was "Unresolved reference".
+  Test libraries (testImplementation) are only visible in src/test. Moved it.
+- ./gradlew test fails on Spring's generated contextLoads(): it starts the whole app,
+  and without the local profile there's no database. Fixing that is Day 11.
+- On purpose: swapped the first two lines of classify(). The connect-timeout test failed
+  (expected CONNECT_TIMEOUT, got REQUEST_TIMEOUT), the other 5 passed. Undid it with git restore.
+
+**Tests:**
+| Test                                   | Result |
+|----------------------------------------|--------|
+| 200 → up, no error                     | pass   |
+| 500 → down, HTTP_STATUS                | pass   |
+| Request timeout → REQUEST_TIMEOUT      | pass   |
+| Connect timeout → CONNECT_TIMEOUT      | pass   |
+| DNS wrapped in ConnectException → DNS  | pass   |
+| Invalid URL → INVALID_URL, no request  | pass   |
+
+**Learned:**
+- Unit test (one class, fakes for everything else) vs integration test (real database etc.).
+- A mock only does what you tell it: every { ... } returns / throws.
+- Dependency injection is what makes code testable: you can't swap something a
