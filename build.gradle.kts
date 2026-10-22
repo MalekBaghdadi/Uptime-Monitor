@@ -33,6 +33,10 @@ dependencies {
 	testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
 	// Mocking library made for Kotlin. Day 10.
 	testImplementation("io.mockk:mockk:1.14.6")
+	// A real, throwaway Postgres for tests. Day 11.
+	// No versions needed: Spring Boot picks ones that work together.
+	testImplementation("org.springframework.boot:spring-boot-testcontainers")
+	testImplementation("org.testcontainers:testcontainers-postgresql")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
