@@ -31,6 +31,8 @@ dependencies {
 	testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
 	testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+	// Mocking library made for Kotlin. Day 10.
+	testImplementation("io.mockk:mockk:1.14.6")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

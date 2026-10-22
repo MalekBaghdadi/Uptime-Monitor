@@ -19,11 +19,10 @@ import javax.net.ssl.SSLException
 @Service
 class CheckService(
     private val checkResultRepository: CheckResultRepository,
+    // Passed in, not built here: the app gets the real one (HttpClientConfig),
+    // tests get a fake one.
+    private val httpClient: HttpClient,
 ) {
-    private val httpClient: HttpClient = HttpClient.newBuilder()
-        .connectTimeout(Duration.ofSeconds(5))
-        .followRedirects(HttpClient.Redirect.NORMAL)
-        .build()
 
     fun check(target: Target): CheckResult {
         val checkedAt = Instant.now()
