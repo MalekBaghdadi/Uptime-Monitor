@@ -1,0 +1,15 @@
+# Build output and caches: Docker builds its own
+build/
+.gradle/
+.kotlin/
+bin/
+out/
+
+# Git and editors
+.git/
+.idea/
+.vscode/
+
+# Secrets: never inside an image
+.env
+**/application-local.properties
