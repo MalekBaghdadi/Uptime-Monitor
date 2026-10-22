@@ -525,3 +525,58 @@ inserts check rows with a known answer and checks findUptimeLast24h() returns ex
 
 **Next:** Tue Nov 3: a multi-stage Dockerfile for the app, run against the Postgres container.
 EOF
+
+cat >> DEVLOG.md << 'EOF'
+
+## Day 12 (Oct 22–23, plan: Tue Nov 3): a multi-stage Dockerfile
+
+**Goal:** (your 2–3 sentences)
+
+**Did:** Wrote a two-stage Dockerfile: eclipse-temurin:21-jdk builds the jar with ./gradlew bootJar,
+eclipse-temurin:21-jre runs it as a non-root user. Added .dockerignore. Created the uptime-net
+network, connected the existing Postgres container to it, and ran the app container with the
+database settings as env vars. Health UP, real targets returned, and the scheduler checks from
+inside the container.
+
+**Decisions:**
+- Multi-stage: the JDK, Gradle and the source stay in stage 1. The final image is the JRE + one jar.
+- bootJar, no tests in the image build: the integration tests need Docker, which the build doesn't have.
+  Tests run locally and in CI (Week 5).
+- Settings come in as env vars (SPRING_DATASOURCE_*), never baked into the image. Same image works anywhere.
+- .dockerignore excludes application-local.properties: .gitignore doesn't apply to Docker, so the
+  password would otherwise end up inside the jar.
+- User-defined network: containers find each other by name through Docker's DNS. Compose works the same way.
+- Non-root user. Exec-form ENTRYPOINT so docker stop shuts Spring down cleanly.
+- Cache mount for /root/.gradle: libraries survive between builds without going into the image.
+
+**Broke:**
+- First build took 42 min: downloading both Java images, Gradle and all the libraries. One-time cost.
+- On purpose: ran a copy with jdbc:postgresql://localhost:5432. "Connection to localhost:5432 refused",
+  container Exited (1). Inside a container, localhost is the container itself. -p 5432:5432 publishes
+  Postgres to Windows, not to other containers.
+
+**Tests:**
+| Check                                  | Result                                   |
+|----------------------------------------|------------------------------------------|
+| docker build                           | FINISHED (18/18)                         |
+| /actuator/health from the container    | UP                                       |
+| /targets/status                        | real targets, lastCheckedAt after start  |
+| Both containers on uptime-net          | yes                                      |
+| Database URL = localhost               | refused, Exited (1)                      |
+
+**Learned:**
+- Dockerfile = recipe, image = the built result, container = a running copy of an image.
+- Each Dockerfile line is a layer; unchanged layers are reused on the next build.
+- Every container has its own localhost.
+- Refused = the host replied "port closed". Timeout = no reply at all.
+- -p publishes a port to the host only.
+- Spring maps env vars to properties (SPRING_DATASOURCE_URL → spring.datasource.url), and env vars win.
+
+**Known limitations:**
+- Password typed on the command line, so it's in shell history. Day 13: a .env file with Compose.
+- Network setup is manual (network create + connect). Day 13: Compose does it.
+- If Postgres isn't ready, the app exits instead of waiting. Day 13: health check.
+- No JVM memory cap yet (-Xmx300m comes in Week 4).
+
+**Next:** Wed Nov 4: docker-compose.yml with the app and Postgres, and README v1.
+EOF
