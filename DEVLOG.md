@@ -365,3 +365,59 @@ and checks only the targets that are due, honoring intervalSeconds.
 
 **Next:** Thu Oct 29: uptime % over the last 24 hours, as a SQL aggregation.
 EOF
+
+cat >> DEVLOG.md << 'EOF'
+
+## Day 9: Oct 22 — Uptime % over the last 24 hours
+
+**Goal:** Show each target's uptime over the last 24 hours as a percentage, calculated
+by Postgres in one query, and prove the numbers are right by checking the raw rows.
+
+**Did:** Wrote the query in psql first, checked it by hand, then added GET /targets/uptime
+(repository native query + projection interface + controller).
+
+**Decisions:**
+- Uptime = up checks / all checks in a rolling 24 h window, × 100, rounded to 2 decimals.
+- Every target is listed. No checks in 24 h → uptimePercent = null ("no data", not 0% or 100%).
+- Paused targets are included; their uptime covers only the checks they had.
+- All math in SQL, returned through a projection interface (no entity needed).
+- BigDecimal for the percentage, so 98.08 stays exact.
+
+**Found:**
+- GitHub and example.org each had 1 failed check, 2 s apart (Oct 21, 22:22 UTC).
+  Two unrelated sites failing together = most likely my own network, not the sites.
+  Can't prove it: the rows are from before Day 7's error_type fix ("ConnectException: no details").
+
+**Broke (on purpose):**
+- 24 h filter in WHERE instead of ON: the never-checked target disappeared. WHERE drops
+  the LEFT JOIN's empty row because NULL >= anything is not true.
+- COUNT(*) instead of COUNT(c.id): the never-checked target showed 1 check.
+- Both gave believable output with no error.
+
+**Tests:**
+| Test                           | Result                                      |
+|--------------------------------|---------------------------------------------|
+| Hand check, GitHub             | 52 / 53 = 98.11 ✓                           |
+| Hand check, Example            | 58 / 59 = 98.31 ✓                           |
+| Never-checked target (24)      | 0 checks, uptimePercent null ✓              |
+| curl vs psql, all 11 targets   | identical                                   |
+
+**Learned:**
+- GROUP BY + COUNT(*) FILTER (WHERE ...) to count a subset per group.
+- 100.0 instead of 100 to avoid whole-number division.
+- LEFT JOIN keeps rows with no match; conditions on the joined table go in ON.
+- COUNT(column) skips NULLs, COUNT(*) doesn't.
+- NULLIF(x, 0) avoids division by zero.
+- Postgres lowercases unquoted aliases; quote them to keep camelCase for projections.
+- Projection interfaces: Spring fills them by matching property names to column aliases.
+
+**Known limitations:**
+- Uptime counts checks, not time: hours when the app was off don't count at all.
+- A target with a 30 s interval has twice the weight in rows of a 60 s one (fine per target,
+  but not comparable as "minutes down").
+- If my own network drops, every target looks down. Real monitors check from several places.
+- The window is fixed at 24 h (no ?hours= parameter yet).
+- Reads the whole check_results table, like DISTINCT ON. Week 6: index on (target_id, checked_at).
+
+**Next:** Fri Oct 30: unit tests for the checker (success, timeout, error status), mocking the HTTP call.
+EOF
