@@ -580,3 +580,57 @@ inside the container.
 
 **Next:** Wed Nov 4: docker-compose.yml with the app and Postgres, and README v1.
 EOF
+
+cat >> DEVLOG.md << 'EOF'
+
+## Day 13 (Fri Oct 23, plan: Wed Nov 4): Docker Compose + README v1
+
+**Goal:** (your 2–3 sentences)
+
+**Did:** Wrote docker-compose.yml: postgres:18 with a named volume and a pg_isready health check,
+and the app built from the Dockerfile, waiting for Postgres with condition: service_healthy.
+Secrets in .env (gitignored), .env.example committed. Replaced the README with v1.
+Removed Day 12's manual app container and uptime-net; stopped the old Postgres (data kept).
+
+**Decisions:**
+- Compose gets a fresh volume (uptime-monitor_pgdata), so it proves the app works from an empty
+  database. The old container is stopped, not deleted: Days 1–12 history is in uptime-monitor-pgdata.
+- Fixed project name (name: uptime-monitor): same container and volume names in any clone folder.
+- Postgres published on 127.0.0.1 only: reachable from my machine, not from the network.
+- Same user, password and database name as before, so bootRun, psql and tests work unchanged.
+- restart: unless-stopped: containers come back after a crash or a reboot.
+
+**Broke:**
+- Stopped Postgres under the running app: health DOWN, app stayed up. Started it again: UP,
+  the pool reconnected by itself. (Day 12: no database at startup = crash.)
+- down then up: the first curl printed nothing. The request came before Spring finished starting,
+  and -s hid the error. Container "Started" is not app "ready". Redid it with sleep 10 and -sS: data survived.
+- down -v: volume deleted, targets gone ([]). That's the only command that loses data.
+- Found an empty uptime-monitor/ folder in the project root (never tracked). Removed it.
+
+**Tests:**
+| Check                                    | Result                                 |
+|------------------------------------------|----------------------------------------|
+| docker compose up                        | Postgres healthy, then app started     |
+| Empty database                           | Hibernate created both tables          |
+| Example + GitHub / Broken                | UP / DOWN (DNS)                        |
+| Stop Postgres while running              | health DOWN, app up; back to UP        |
+| down + up                                | data kept                              |
+| down -v                                  | data gone                              |
+| Rebuild with no code change              | 2.6 s, every step cached               |
+
+**Learned:**
+- Compose = Day 12's manual steps in one file. One network per project; service names are DNS names.
+- depends_on alone waits for the container to start; service_healthy waits for the health check.
+- Named volumes survive down; down -v deletes them.
+- Compose reads .env automatically to fill in ${...}.
+- Container started is not app ready. curl -s hides errors; -sS shows them.
+
+**Known limitations:**
+- No health check on the app itself, so Docker can't tell when Spring is ready.
+- Port 8080 is open on all interfaces. Nginx goes in front in Week 4.
+- bootRun and the Compose app both want port 8080: run one at a time.
+- .env has to be created by hand from .env.example on each machine.
+
+**Next:** Thu Nov 5: AWS Free plan check, $1 budget alert, launch a t3.micro Ubuntu instance.
+EOF
