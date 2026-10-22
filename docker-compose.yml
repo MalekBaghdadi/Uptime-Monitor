@@ -1,0 +1,41 @@
+# Fixed project name, so containers and volumes get the same names
+# whatever folder the repo is cloned into.
+name: uptime-monitor
+
+services:
+  postgres:
+    image: postgres:18                     # same version as dev and tests
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}          # filled in from .env
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql         # Postgres 18 data location
+    ports:
+      - "127.0.0.1:5432:5432"              # your machine only, for psql and bootRun
+    healthcheck:
+      # pg_isready asks Postgres "are you accepting connections?"
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s                         # ask every 5 s
+      timeout: 3s
+      retries: 10                          # "unhealthy" after 10 failures in a row
+      start_period: 10s                    # failures in the first 10 s don't count
+    restart: unless-stopped
+
+  app:
+    build: .                               # build from the Dockerfile in this folder
+    image: uptime-monitor                  # name the built image
+    depends_on:
+      postgres:
+        condition: service_healthy         # wait for the health check, not just the start
+    environment:
+      # "postgres" here is the service name above, resolved by Compose's DNS
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+volumes:
+  pgdata:                                  # Compose names it uptime-monitor_pgdata
