@@ -459,4 +459,69 @@ so they run with no network, database or Spring.
 **Learned:**
 - Unit test (one class, fakes for everything else) vs integration test (real database etc.).
 - A mock only does what you tell it: every { ... } returns / throws.
-- Dependency injection is what makes code testable: you can't swap something a
+- Dependency injection is what makes code testable: you can't swap something a class builds itself.
+- src/main vs src/test are separate source sets with separate dependencies.
+- A test that never fails proves nothing: break the code once and watch it fail.
+- Commit before experimenting, then git restore <file> undoes the experiment.
+
+**Known limitations:**
+- Tests prove the labels are right *given* an exception. They don't prove the real HttpClient
+  throws those exceptions; the Day 7 manual tests with bad URLs covered that.
+- responseTimeMs isn't really tested: the fake answers instantly.
+- SSL and connection refused have no unit tests yet.
+- ./gradlew test (all tests) still fails because of contextLoads(). Day 11.
+
+**Next:** Mon Nov 2: an integration test against a real Postgres with Testcontainers.
+EOF
+
+cat >> DEVLOG.md << 'EOF'
+
+## Day 11 (Thu Oct 22, plan: Mon Nov 2): integration tests with a real Postgres
+
+**Goal:** (your 2–3 sentences)
+
+**Did:** Added Testcontainers. TestcontainersConfiguration starts a throwaway postgres:18
+for any test that imports it. Fixed Spring's contextLoads() with it, and wrote UptimeQueryTest:
+inserts check rows with a known answer and checks findUptimeLast24h() returns exactly that.
+./gradlew test (all 8 tests) passes for the first time.
+
+**Decisions:**
+- Real Postgres, not H2: DISTINCT ON and COUNT(*) FILTER are Postgres-only, so H2 can't run them.
+- Same version as the dev container (postgres:18), so tests and app run on the same database.
+- @ServiceConnection: Spring reads the container's random port/user/password itself.
+  No credentials in test config, and the real database is never touched.
+- @DataJpaTest for the query test: only the database layer, no scheduler adding rows mid-test.
+  Each test is rolled back, so the database stays empty between tests.
+- The test sets checked_at itself (1–4 h, 25 h, 30 h ago) so the right answer is known in advance.
+
+**Broke:**
+- "Redundant call of conversion method" warnings: totalChecks/upChecks are already Long.
+  Removed .toLong() and compared with 4L, 0L. uptimePercent is a BigDecimal, so .toDouble() stays.
+- On purpose: moved the 24 h filter from ON to WHERE (the Day 9 mistake). The test failed at the
+  target-id list: "Never checked" and "Only old checks" disappeared. Undid it with git restore.
+
+**Tests:**
+| Test                                     | Result |
+|------------------------------------------|--------|
+| contextLoads (whole app, real Postgres)  | pass   |
+| Mostly up: 4 checks, 3 up, 75.00%        | pass   |
+| 25 h-old row ignored                     | pass   |
+| Never checked: kept, uptime null         | pass   |
+| Only old checks: kept, uptime null       | pass   |
+| 6 CheckService unit tests (Day 10)       | pass   |
+
+**Learned:**
+- Unit test = one class with fakes. Integration test = real pieces together (repository + Hibernate + Postgres).
+- Testcontainers starts a container per test run and Ryuk cleans it up, even after a crash.
+- contextLoads passing proves every bean wires up (it confirmed the Day 10 HttpClient refactor).
+- saveAndFlush: native SQL reads the database directly, so rows must be sent before the query.
+- Two test types = two Spring contexts = two Hikari pools and two containers.
+- Kotlin: 4 is an Int, 4L is a Long, and assertEquals treats them as different.
+
+**Known limitations:**
+- Each Spring context starts its own container, so the full test run is slower than it needs to be.
+- findLatestPerTarget() (DISTINCT ON) has no integration test yet.
+- Tests need Docker running. GitHub Actions (Week 5) has Docker, so CI will work.
+
+**Next:** Tue Nov 3: a multi-stage Dockerfile for the app, run against the Postgres container.
+EOF
