@@ -634,3 +634,4 @@ Removed Day 12's manual app container and uptime-net; stopped the old Postgres (
 
 **Next:** Thu Nov 5: AWS Free plan check, $1 budget alert, launch a t3.micro Ubuntu instance.
 EOF
+
