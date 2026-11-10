@@ -635,3 +635,37 @@ Removed Day 12's manual app container and uptime-net; stopped the old Postgres (
 **Next:** Thu Nov 5: AWS Free plan check, $1 budget alert, launch a t3.micro Ubuntu instance.
 EOF
 
+
+## Day 15 (Tue Nov 10, plan: Fri Nov 6): harden the server
+
+**Goal:** (your 2–3 sentences)
+
+**Did:** Created user malek (no password, in the sudo group, passwordless sudo via
+/etc/sudoers.d/malek, checked with visudo -cf) and gave it my key. Locked down SSH with
+/etc/ssh/sshd_config.d/10-hardening.conf: PermitRootLogin no, PasswordAuthentication no,
+KbdInteractiveAuthentication no. Checked with sshd -T, applied with systemctl reload ssh.
+Added ports 80 and 443 to the AWS security group. Enabled ufw with 22, 80, 443 (v4 and v6).
+
+**Decisions:**
+- My file is named 10-... so it wins over the cloud image's 60-... file (first value wins).
+- Allowed 22 in ufw before enabling it, so it could not cut me off.
+- Kept one SSH session open while changing SSH settings, as a way back in.
+- Port 22 stays limited to my IP in the security group. Revisit on Nov 17 for GitHub Actions.
+- The private key stays on my PC only, never on the server.
+
+**Broke:**
+- Ran my tests inside the server instead of on my PC, twice. The key is not on the server (good),
+  and ssh to the server's own IP hung because port 22 only allows my PC's IP.
+- Refused vs timed out: curl to port 8080 timed out (dropped by the firewall). Curl to port 80
+  failed at once (reached the machine, nothing listening).
+- Password login: Permission denied (publickey), no password prompt. Root login with the
+  key: Permission denied (publickey).
+
+**Known limitations:**
+- 43 updates pending (24 security). setup.sh will apply them.
+- Passwordless sudo: the key is the only lock, so the .pem must stay private.
+- If my home IP changes, I am locked out of SSH until I edit the security group.
+- The default ubuntu user still exists with the same key.
+- Docker skips ufw rules, so the security group is the real wall for container ports.
+
+**Next:** Mon Nov 9: start setup.sh (install Docker, add a 2 GB swap file, safe to run twice).
