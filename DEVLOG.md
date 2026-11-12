@@ -669,3 +669,42 @@ Added ports 80 and 443 to the AWS security group. Enabled ufw with 22, 80, 443 (
 - Docker skips ufw rules, so the security group is the real wall for container ports.
 
 **Next:** Mon Nov 9: start setup.sh (install Docker, add a 2 GB swap file, safe to run twice).
+
+## Day 16 (Thu Nov 12, plan: Mon Nov 9): start setup.sh
+
+**Goal:** (your 2–3 sentences)
+
+**Did:** Wrote setup.sh with three parts, each safe to run twice: a 2 GB swap file
+(/swapfile, chmod 600, mkswap, swapon, line in /etc/fstab), Docker from Docker's official
+apt repo (docker-ce, compose plugin), and adding my user to the docker group. Copied it to
+the server with scp and ran it as malek. Ran it twice: the second run changed nothing and
+/etc/fstab has one swap line. After logging in again, docker ps and hello-world work
+without sudo.
+
+**Decisions:**
+- Docker's official apt repo, not Ubuntu's docker.io, so I get the current version and the compose plugin.
+- Run as malek with sudo inside the script. The script refuses to run as root.
+- apt_get helper: no questions asked, and it waits if another apt job holds the lock.
+- Each swap step (create, turn on, fstab) has its own check, so the script repairs only what is missing.
+- .gitattributes forces LF line endings for .sh files, because CRLF breaks scripts on Linux.
+
+**Broke:**
+- Pasted the ssh line and "bash setup.sh" together. The second line was lost during login
+  and nothing ran. Send the ssh line on its own.
+- Ran setup.sh on my PC by mistake: "sudo: command not found". set -e stopped it at the
+  first sudo line, so nothing changed.
+- On purpose: swapoff /swapfile, then ran the script again. Only "Turning swap on" ran,
+  and swap was back at 2 GB.
+
+**Known limitations:**
+- setup.sh only refreshes package lists. It does not install updates, although DEVLOG #15
+  said it would. 14 updates are pending, and a kernel update needs a reboot.
+- The docker group is basically root access. Anyone in it can take over the machine.
+- The Docker check is "is the docker command there". A half-finished install would be skipped.
+- If the script dies between creating the swap file and mkswap, a rerun skips creation and swapon fails.
+- Not tested yet: swap and Docker coming back after a reboot.
+- It does not remove old Docker packages first. A fresh Ubuntu image has none.
+
+**Next:** Tue Nov 10 slot: finish setup.sh (clone the repo, start the stack with the JVM heap
+capped at 300 MB, add package upgrades). Test it by destroying the instance and running the
+script on a new one.
