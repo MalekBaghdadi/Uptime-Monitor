@@ -708,3 +708,42 @@ without sudo.
 **Next:** Tue Nov 10 slot: finish setup.sh (clone the repo, start the stack with the JVM heap
 capped at 300 MB, add package upgrades). Test it by destroying the instance and running the
 script on a new one.
+
+## Day 17 (Sat Nov 14, plan: Tue Nov 10): finish setup.sh
+
+**Goal:** (your 2–3 sentences)
+
+**Did:** Extended setup.sh: package upgrades, install git, clone the repo (or pull if it is
+already there), create .env with a random database password, and start the stack with
+sudo docker compose up -d --build. It also says when a reboot is needed. Added
+JAVA_TOOL_OPTIONS=-Xmx300m to docker-compose.yml. Ran it on the server: first build took
+210 s with no out-of-memory. Health was UP and /targets/status returned [] (empty database).
+Ran it twice: the second run changed nothing, the .env fingerprint (md5sum) was identical,
+and the build came from cache in 2 s.
+Rebuild test: launched a temporary t3.micro (Ubuntu 24.04), copied setup.sh with scp and ran
+it once as the ubuntu user. About 4 minutes of building, then health UP and both containers
+up (Postgres healthy). Terminated the instance afterwards.
+
+**Decisions:**
+- Heap cap through JAVA_TOOL_OPTIONS in docker-compose.yml, not in the Dockerfile (exec-form ENTRYPOINT has no place for flags).
+- .env gets a random password (openssl rand -hex 24), only if it does not exist. It is written to a temp file and moved, so it is never half-written.
+- The script uses sudo for docker compose, because the docker group only works after a new login.
+- The repo is cloned over https (it is public), so the server needs no Git keys.
+- The rebuild test used a temporary second instance, not the real server, because hardening (user, SSH rules) is not in setup.sh.
+
+**Broke:**
+- I staged docker-compose.yml and setup.sh but never committed. The server cloned the old
+  compose file and Java had no cap: grep JAVA_TOOL_OPTIONS found nothing. Fix: commit, push,
+  run setup.sh again. Then env showed JAVA_TOOL_OPTIONS=-Xmx300m and the log said "Picked up".
+- Typed the placeholder NEW-IP literally in ssh and scp: "Could not resolve hostname".
+- The AWS console would not load for a long time. Cause unknown.
+
+**Known limitations:**
+- Java's default heap max is already about 25% of RAM (about 227 MB here), so -Xmx300m is a fixed number a bit above the default.
+- With only the app and Postgres running, swap was already in use (about 130 MB). Prometheus and Grafana in Week 5 will be tight.
+- The pending reboot is not done. Not tested: swap and the stack coming back after a reboot.
+- setup.sh does not do the Day 15 hardening. A rebuilt server needs it by hand.
+- If the clone is interrupted, a rerun fails because the folder exists without .git.
+- On the fresh instance, apt still reported 6 packages "not upgraded" after the upgrade step. Not checked why.
+
+**Next:** Wed Nov 11 slot: Nginx in front as a reverse proxy, and a free DuckDNS subdomain.
